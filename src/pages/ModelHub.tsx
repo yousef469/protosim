@@ -87,10 +87,10 @@ export function ModelHubPage() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+    <div className="h-screen bg-gray-900 text-white flex flex-col">
       <Header tab={tab} onTabChange={setTab} onBack={() => navigate('/')} search={search} onSearchChange={setSearch} />
 
-      <div className="flex-1 px-4 py-6 max-w-5xl mx-auto w-full">
+      <div className="flex-1 px-4 py-6 max-w-5xl mx-auto w-full overflow-y-auto">
         {tab === 'models' ? (
           <>
             <div className="flex gap-1 mb-6 flex-wrap">
@@ -233,10 +233,12 @@ function ModelCard({ model, downloading, installed, onInstall }: {
             className={`text-[10px] font-medium px-3 py-1 rounded-lg transition-colors ${
               hasModelUrl
                 ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                : model.source === '#'
+                  ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
             }`}
           >
-            {hasModelUrl ? 'Install' : 'View Source'}
+            {hasModelUrl ? 'Install' : model.source === '#' ? 'No Source' : 'View Source'}
           </button>
         )}
       </div>

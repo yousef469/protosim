@@ -84,13 +84,11 @@ export class MuJoCoController {
       mod.FS.writeFile(xmlPath, new TextEncoder().encode(xmlContent));
 
       // Write XMLs that are transitively <include>d by the root
-      if (allXmls) {
-        const needed = collectAllIncludes(xmlContent, allXmls);
-        if (needed.size > 0) {
-          console.log('[MuJoCo] writing', needed.size, 'included XMLs:', [...needed.keys()]);
-          for (const [filename, text] of needed) {
-            mod.FS.writeFile(base + '/' + filename, new TextEncoder().encode(text));
-          }
+      const needed: Map<string, string> = allXmls ? collectAllIncludes(xmlContent, allXmls) : new Map();
+      if (needed.size > 0) {
+        console.log('[MuJoCo] writing', needed.size, 'included XMLs:', [...needed.keys()]);
+        for (const [filename, text] of needed) {
+          mod.FS.writeFile(base + '/' + filename, new TextEncoder().encode(text));
         }
       }
 
@@ -117,13 +115,16 @@ export class MuJoCoController {
 
         const byLeaf = new Map<string, Uint8Array>();
         for (const [name, data] of meshFiles) {
-          byLeaf.set(name.toLowerCase(), data);
           byLeaf.set(name, data);
+          byLeaf.set(name.toLowerCase(), data);
+          const leaf = name.replace(/^.*[/\\]/, '');
+          byLeaf.set(leaf, data);
+          byLeaf.set(leaf.toLowerCase(), data);
         }
 
         for (const refPath of referencedPaths) {
           const leaf = refPath.replace(/^.*[/\\]/, '');
-          const data = byLeaf.get(leaf) ?? byLeaf.get(leaf.toLowerCase());
+          const data = byLeaf.get(leaf) ?? byLeaf.get(leaf.toLowerCase()) ?? byLeaf.get(refPath) ?? byLeaf.get(refPath.toLowerCase());
           if (!data) {
             console.warn('[MuJoCo] no mesh data for:', refPath);
             continue;
@@ -144,6 +145,38 @@ export class MuJoCoController {
         }
 
         console.log('[MuJoCo] wrote', referencedPaths.size, 'mesh file paths');
+      }
+
+      // Rename duplicate geom names in root XML (root takes precedence over includes)
+      if (allXmls && needed.size > 0) {
+        const includedGeomNames = new Set<string>();
+        const geomNameRe = /<geom\s[^>]*\bname\s*=\s*["']([^"']+)["']/gi;
+        for (const [, text] of allXmls) {
+          if (text === xmlContent) continue;
+          let m2;
+          while ((m2 = geomNameRe.exec(text)) !== null) includedGeomNames.add(m2[1]);
+        }
+        if (includedGeomNames.size > 0) {
+          let rootXml = xmlContent;
+          const rootGeoms: { full: string; name: string }[] = [];
+          let m2;
+          const rootRe = /<geom\s([^>]*\bname\s*=\s*["']([^"']+)["'][^>]*)>/gi;
+          while ((m2 = rootRe.exec(xmlContent)) !== null) {
+            rootGeoms.push({ full: m2[0], name: m2[2] });
+          }
+          let modified = false;
+          for (const g of rootGeoms) {
+            if (includedGeomNames.has(g.name)) {
+              const newName = g.name + '_scene';
+              rootXml = rootXml.replace(g.full, g.full.replace(`name="${g.name}"`, `name="${newName}"`));
+              modified = true;
+            }
+          }
+          if (modified) {
+            mod.FS.writeFile(xmlPath, new TextEncoder().encode(rootXml));
+            console.log('[MuJoCo] renamed conflicting root geoms');
+          }
+        }
       }
 
       const model = mod.MjModel.from_xml_path(xmlPath) as MjModel;
@@ -251,7 +284,12 @@ function collectAllIncludes(
   while (queue.length > 0) {
     const filename = queue.shift()!;
     if (needed.has(filename)) continue;
-    const text = allXmls.get(filename);
+
+    let text = allXmls.get(filename)
+      ?? allXmls.get(filename.toLowerCase())
+      ?? [...allXmls.entries()].find(([k]) =>
+        k.replace(/^.*[/\\]/, '').toLowerCase() === filename.replace(/^.*[/\\]/, '').toLowerCase()
+      )?.[1];
     if (!text) {
       console.warn('[MuJoCo] included file "' + filename + '" not found in uploads');
       continue;

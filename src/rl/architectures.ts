@@ -66,10 +66,6 @@ export function modelInputDim(obsDim: number, arch: ArchitectureId, config: Arch
   return isTemporal(arch) ? config.historyLen * obsDim : obsDim;
 }
 
-function cap(t: tf.Tensor): tf.SymbolicTensor {
-  return t as tf.SymbolicTensor;
-}
-
 export function buildActor(
   arch: ArchitectureId,
   config: ArchConfig,
@@ -136,51 +132,51 @@ export function buildCritic(
 function buildMLP(input: tf.SymbolicTensor, _obsDim: number, config: ArchConfig): tf.SymbolicTensor {
   let x = input;
   for (let i = 0; i < config.numLayers; i++) {
-    x = cap(tf.layers.dense({ units: config.hiddenSize, activation: config.activation }).apply(x));
+    x = tf.layers.dense({ units: config.hiddenSize, activation: config.activation }).apply(x) as unknown as tf.SymbolicTensor;
   }
   return x;
 }
 
 function buildResidualMLP(input: tf.SymbolicTensor, config: ArchConfig): tf.SymbolicTensor {
-  let x = cap(tf.layers.dense({ units: config.hiddenSize, activation: config.activation }).apply(input));
+  let x = tf.layers.dense({ units: config.hiddenSize, activation: config.activation }).apply(input) as unknown as tf.SymbolicTensor;
   for (let i = 1; i < config.numLayers; i++) {
     const skip = x;
-    x = cap(tf.layers.dense({ units: config.hiddenSize, activation: config.activation }).apply(x));
-    x = cap(tf.layers.dense({ units: config.hiddenSize, activation: config.activation }).apply(x));
-    x = cap(tf.layers.add().apply([x, skip]));
+    x = tf.layers.dense({ units: config.hiddenSize, activation: config.activation }).apply(x) as unknown as tf.SymbolicTensor;
+    x = tf.layers.dense({ units: config.hiddenSize, activation: config.activation }).apply(x) as unknown as tf.SymbolicTensor;
+    x = tf.layers.add().apply([x, skip]) as unknown as tf.SymbolicTensor;
   }
   return x;
 }
 
 function buildLSTM(input: tf.SymbolicTensor, obsDim: number, config: ArchConfig): tf.SymbolicTensor {
-  let x = cap(tf.layers.reshape({ targetShape: [config.historyLen, obsDim] }).apply(input));
+  let x = tf.layers.reshape({ targetShape: [config.historyLen, obsDim] }).apply(input) as unknown as tf.SymbolicTensor;
   for (let i = 0; i < config.numLayers; i++) {
-    x = cap(tf.layers.lstm({ units: config.hiddenSize, returnSequences: i < config.numLayers - 1 }).apply(x));
+    x = tf.layers.lstm({ units: config.hiddenSize, returnSequences: i < config.numLayers - 1 }).apply(x) as unknown as tf.SymbolicTensor;
   }
   return x;
 }
 
 function buildGRU(input: tf.SymbolicTensor, obsDim: number, config: ArchConfig): tf.SymbolicTensor {
-  let x = cap(tf.layers.reshape({ targetShape: [config.historyLen, obsDim] }).apply(input));
+  let x = tf.layers.reshape({ targetShape: [config.historyLen, obsDim] }).apply(input) as unknown as tf.SymbolicTensor;
   for (let i = 0; i < config.numLayers; i++) {
-    x = cap(tf.layers.gru({ units: config.hiddenSize, returnSequences: i < config.numLayers - 1 }).apply(x));
+    x = tf.layers.gru({ units: config.hiddenSize, returnSequences: i < config.numLayers - 1 }).apply(x) as unknown as tf.SymbolicTensor;
   }
   return x;
 }
 
 function buildTCN(input: tf.SymbolicTensor, obsDim: number, config: ArchConfig): tf.SymbolicTensor {
-  let x = cap(tf.layers.reshape({ targetShape: [config.historyLen, obsDim] }).apply(input));
+  let x = tf.layers.reshape({ targetShape: [config.historyLen, obsDim] }).apply(input) as unknown as tf.SymbolicTensor;
   for (let i = 0; i < config.numLayers; i++) {
     const dilation = Math.pow(2, i);
-    x = cap(tf.layers.conv1d({
+    x = tf.layers.conv1d({
       filters: config.hiddenSize,
       kernelSize: config.kernelSize,
       dilationRate: dilation,
       padding: 'causal',
       activation: config.activation,
-    }).apply(x));
+    }).apply(x) as unknown as tf.SymbolicTensor;
   }
-  x = cap(tf.layers.globalAveragePooling1d().apply(x));
+  x = tf.layers.globalAveragePooling1d().apply(x) as unknown as tf.SymbolicTensor;
   return x;
 }
 

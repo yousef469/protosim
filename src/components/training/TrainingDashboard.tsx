@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import useRlStore from '../../store/rlStore';
 import useSimulationStore from '../../store/simulationStore';
+import { CACHE_KEY } from '../../mujoco/sampleRobots';
 import { TRAINING_TASKS } from '../../rl/tasks';
 import { ARCHITECTURES, isTemporal } from '../../rl/architectures';
 import { currentAgent } from '../../rl/agentRef';
-import { CACHE_KEY } from '../../mujoco/sampleRobots';
 import type { TrainingTaskId } from '../../rl/tasks';
 import type { ArchitectureId } from '../../rl/architectures';
 
@@ -19,12 +19,40 @@ export function TrainingDashboard() {
     architecture, archConfig,
     setTraining, setTrainingSpeed,
     setTrainingTask, setCustomRewardCode,
-    setArchitecture, setArchConfig,
+    setArchitecture, setArchConfig, setBestReward,
   } = useRlStore();
 
   const categories = ['core', 'temporal'] as CategoryTab[];
   const activeCategory: CategoryTab = ARCHITECTURES.find(a => a.id === architecture)?.category ?? 'core';
   const visibleArches = ARCHITECTURES.filter(a => a.category === activeCategory);
+
+  const prevArchRef = useRef(architecture);
+  useEffect(() => {
+    if (prevArchRef.current !== architecture) {
+      prevArchRef.current = architecture;
+      setBestReward(-Infinity);
+      useSimulationStore.getState().addLog(`Switched to ${architecture} — best reward reset`, 'info');
+      // Try to reload checkpoint from localStorage if it now matches
+      if (currentAgent) {
+        const saved = localStorage.getItem(CACHE_KEY);
+        if (saved) {
+          const result = currentAgent.loadSerialized(saved);
+          if (result.ok) {
+            try {
+              const data = JSON.parse(saved);
+              if (typeof data.reward === 'number') {
+                useRlStore.getState().setBestReward(data.reward);
+              }
+            } catch {}
+            useSimulationStore.getState().addLog('Loaded checkpoint for new architecture', 'success');
+          } else if (result.mismatch && !result.mismatch.includes('Architecture mismatch')) {
+            // Shape mismatch (different hiddenSize/numLayers) — warn but don't reset
+            useSimulationStore.getState().addLog(`Checkpoint incompatible: ${result.mismatch}`, 'warning');
+          }
+        }
+      }
+    }
+  }, [architecture, setBestReward]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -108,22 +136,25 @@ export function TrainingDashboard() {
       setHasCheckpoint(true);
       e.target.value = '';
 
-      // Restore reward from checkpoint metadata
-      try {
-        const data = JSON.parse(raw);
-        if (typeof data.reward === 'number') {
-          useRlStore.getState().setBestReward(data.reward);
-        }
-      } catch {}
-
       // Reload weights into the running agent if available
       if (currentAgent) {
-        const ok = currentAgent.loadSerialized(raw);
-        useSimulationStore.getState().addLog(
-          ok ? 'Checkpoint loaded into running agent' : 'Failed to load checkpoint',
-          ok ? 'success' : 'error',
-        );
+        const result = currentAgent.loadSerialized(raw);
+        if (result.ok) {
+          try {
+            const data = JSON.parse(raw);
+            if (typeof data.reward === 'number') {
+              useRlStore.getState().setBestReward(data.reward);
+            }
+          } catch {}
+          useSimulationStore.getState().addLog('Checkpoint loaded into running agent', 'success');
+        } else {
+          localStorage.removeItem(CACHE_KEY);
+          setHasCheckpoint(false);
+          useRlStore.getState().setBestReward(-Infinity);
+          useSimulationStore.getState().addLog(`Import failed: ${result.mismatch ?? 'unknown error'}`, 'error');
+        }
       } else {
+        // No running agent — save for later; editor will validate on agent creation
         useSimulationStore.getState().addLog('Checkpoint saved — start training to apply', 'info');
       }
     };

@@ -3,7 +3,7 @@ import { detectFormat } from '../../lib/modelLoader';
 import useModelStore, { generateModelId, type PhysicsType } from '../../store/modelStore';
 import { getSimulationController } from '../../core/SimulationController';
 import { getMuJoCoController } from '../../mujoco/MuJoCoController';
-import { sampleRobots } from '../../mujoco/sampleRobots';
+import { sampleRobots, type BuiltInRobot } from '../../mujoco/sampleRobots';
 import useSimulationStore from '../../store/simulationStore';
 import useRlStore from '../../store/rlStore';
 
@@ -241,7 +241,7 @@ export function ModelLibrary() {
 
         <div className="pt-1 space-y-1">
           <span className="text-[10px] text-gray-400 font-medium">Demo Robots</span>
-          {sampleRobots.map((r) => (
+          {sampleRobots.filter((r): r is BuiltInRobot => r.type === 'inline').map((r) => (
             <button
               key={r.name}
               onClick={async () => {

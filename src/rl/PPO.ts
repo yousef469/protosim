@@ -92,11 +92,11 @@ export class PPOAgent {
 
     const modelInput = prepareObservation(obs, this.historyBuffer, this.arch, this.archConfig);
 
-    let mean: Float32Array;
-    let value: number;
+    let mean = new Float32Array(this.params.actDim);
+    let value = 0;
     tf.tidy(() => {
       const obsTensor = tf.tensor2d(modelInput, [1, this.modelInputDim]);
-      mean = (this.actor.predict(obsTensor) as tf.Tensor2D).dataSync() as Float32Array;
+      mean = new Float32Array((this.actor.predict(obsTensor) as tf.Tensor2D).dataSync());
       value = (this.critic.predict(obsTensor) as tf.Tensor2D).dataSync()[0];
     });
 
@@ -270,12 +270,33 @@ export class PPOAgent {
         actor: w.actor.map(t => t.shape),
         critic: w.critic.map(t => t.shape),
       },
+      meta: {
+        architecture: this.arch,
+        archConfig: this.archConfig,
+        obsDim: this.params.obsDim,
+        actDim: this.params.actDim,
+      },
     });
   }
 
-  loadSerialized(json: string): boolean {
+  /** Load weights and validate architecture matches the current agent.
+   *  Returns { ok: boolean, mismatch?: string } so callers can show a warning. */
+  loadSerialized(json: string): { ok: boolean; mismatch?: string } {
     try {
       const data = JSON.parse(json);
+      // Validate architecture metadata if present
+      if (data.meta) {
+        const m = data.meta;
+        if (m.architecture && m.architecture !== this.arch) {
+          return { ok: false, mismatch: `Architecture mismatch: checkpoint is '${m.architecture}', agent is '${this.arch}'` };
+        }
+        if (typeof m.obsDim === 'number' && m.obsDim !== this.params.obsDim) {
+          return { ok: false, mismatch: `obsDim mismatch: checkpoint has ${m.obsDim}, agent has ${this.params.obsDim}` };
+        }
+        if (typeof m.actDim === 'number' && m.actDim !== this.params.actDim) {
+          return { ok: false, mismatch: `actDim mismatch: checkpoint has ${m.actDim}, agent has ${this.params.actDim}` };
+        }
+      }
       const actorW = data.actor.map((vals: number[], i: number) => tf.tensor(vals, data.shapes.actor[i]));
       const criticW = data.critic.map((vals: number[], i: number) => tf.tensor(vals, data.shapes.critic[i]));
       this.actor.setWeights(actorW);
@@ -283,9 +304,9 @@ export class PPOAgent {
       const logStdTensor = tf.tensor1d(data.logStd);
       this.logStd.assign(tf.variable(logStdTensor));
       logStdTensor.dispose();
-      return true;
-    } catch {
-      return false;
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, mismatch: String(e) };
     }
   }
 

@@ -85,7 +85,68 @@ export const WALKER_XML = `<?xml version="1.0"?>
 
 export const CACHE_KEY = 'protosim_best_weights'
 
-export const sampleRobots = [
-  { name: 'Cartpole Swingup', xml: CARTWHEEL_XML, desc: 'Balance a pendulum on a cart using a single motor' },
-  { name: 'Walker2D', xml: WALKER_XML, desc: 'Bipedal walker with 4 actuated joints' },
+export interface BuiltInRobot {
+  id: string;
+  name: string;
+  desc: string;
+  type: 'inline';
+  xml: string;
+}
+
+export interface BuiltInFetchRobot {
+  id: string;
+  name: string;
+  desc: string;
+  type: 'fetch';
+  baseUrl: string;
+  rootXml: string;
+}
+
+export type SampleRobot = BuiltInRobot | BuiltInFetchRobot;
+
+export const sampleRobots: SampleRobot[] = [
+  { id: 'cartpole', name: 'Cartpole', desc: 'Balance a pendulum on a cart', type: 'inline', xml: CARTWHEEL_XML },
+  { id: 'walker2d', name: 'Walker2D', desc: 'Bipedal walker with 4 actuated joints', type: 'inline', xml: WALKER_XML },
+  { id: 'unitree-g1', name: 'Unitree G1', desc: 'Full-body humanoid robot with 29 DOF', type: 'fetch', baseUrl: '/robots/unitree_g1', rootXml: 'scene.xml' },
 ]
+
+export async function loadBuiltInRobot(
+  robot: SampleRobot,
+  mjCtrl: import('./MuJoCoController').MuJoCoController,
+  onLog?: (msg: string, type?: 'info' | 'success' | 'error') => void,
+): Promise<string> {
+  if (robot.type === 'inline') {
+    await mjCtrl.loadXML(robot.xml, new Map(), new Map());
+    return robot.xml;
+  }
+
+  const log = onLog || ((msg: string) => console.log(msg));
+  const baseUrl = robot.baseUrl.replace(/\/$/, '');
+
+  const manifestResp = await fetch(`${baseUrl}/manifest.json`);
+  if (!manifestResp.ok) throw new Error(`Failed to fetch manifest: ${manifestResp.status}`);
+  const files: string[] = await manifestResp.json();
+
+  const allXmls = new Map<string, string>();
+  const meshes = new Map<string, Uint8Array>();
+  const meshExt = /\.(stl|obj|msh|dae|ply)$/i;
+
+  await Promise.all(files.map(async (relPath) => {
+    const resp = await fetch(`${baseUrl}/${relPath}`);
+    if (!resp.ok) {
+      log(`Failed to fetch ${relPath}: ${resp.status}`, 'error');
+      return;
+    }
+    if (meshExt.test(relPath)) {
+      meshes.set(relPath, new Uint8Array(await resp.arrayBuffer()));
+    } else if (/\.(xml|mjcf)$/i.test(relPath)) {
+      allXmls.set(relPath, await resp.text());
+    }
+  }));
+
+  const rootText = allXmls.get(robot.rootXml);
+  if (!rootText) throw new Error(`Root XML '${robot.rootXml}' not found in manifest`);
+
+  await mjCtrl.loadXML(rootText, meshes, allXmls);
+  return rootText;
+}

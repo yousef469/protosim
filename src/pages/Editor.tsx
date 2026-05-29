@@ -1,16 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { SceneViewer } from '../components/viewer3d/SceneViewer';
-import { CodeEditor } from '../components/editor/CodeEditor';
-import { Console } from '../components/editor/Console';
 import { Toolbar } from '../components/layout/Toolbar';
-import { SensorPanel } from '../components/sensors/SensorPanel';
-import { ModelLibrary } from '../components/models/ModelLibrary';
-import { ModelDropZone } from '../components/models/ModelDropZone';
 import { TrainingDashboard } from '../components/training/TrainingDashboard';
 import { MuJoCoRenderer } from '../mujoco/MuJoCoRenderer';
 import { ToastOverlay } from '../components/editor/ToastOverlay';
-import { CACHE_KEY } from '../mujoco/sampleRobots';
-import { getSimulationController, type SimulationController } from '../core/SimulationController';
+import { CACHE_KEY, sampleRobots, loadBuiltInRobot } from '../mujoco/sampleRobots';
 import { getMuJoCoController, type MuJoCoController as MuJoCoControllerType } from '../mujoco/MuJoCoController';
 import { PPOAgent, type Transition } from '../rl/PPO';
 import { setCurrentAgent } from '../rl/agentRef';
@@ -19,35 +13,88 @@ import { RobotCameraCapture } from '../components/vision/RobotCameraCapture';
 import { VisionDashboard } from '../components/vision/VisionDashboard';
 import { computeReward } from '../rl/tasks';
 import useSimulationStore from '../store/simulationStore';
-import useEditorStore from '../store/editorStore';
-import useModelStore, { type EditorMode } from '../store/modelStore';
-import useSceneStore from '../store/sceneStore';
 import useRlStore from '../store/rlStore';
 
 export function EditorPage() {
-  const [controller, setController] = useState<SimulationController | null>(null);
   const [mjCtrl, setMjCtrl] = useState<MuJoCoControllerType | null>(null);
   const [useMujoco, setUseMujoco] = useState(false);
-  const { isRunning, isPaused } = useSimulationStore();
-  const { code } = useEditorStore();
-  const editorMode = useModelStore((s) => s.editorMode);
-  const setEditorMode = useModelStore((s) => s.setEditorMode);
-  const transformMode = useModelStore((s) => s.transformMode);
-  const setTransformMode = useModelStore((s) => s.setTransformMode);
-  const models = useModelStore((s) => s.models);
+  const [robotName, setRobotName] = useState<string | null>(null);
+  const [loadingRobot, setLoadingRobot] = useState(false);
+  const { isRunning } = useSimulationStore();
   const { isTraining, modelXML, currentEpisode, totalEpisodes, trainingSpeed, addEpisodeReward, setCurrentEpisode } = useRlStore();
   const trainingLoopRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const ppoRef = useRef<PPOAgent | null>(null);
   const [sidebarTab, setSidebarTab] = useState<'training' | 'vision'>('training');
+  const loadFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const ctrl = getSimulationController();
-    setController(ctrl);
-    ctrl.init();
     const mj = getMuJoCoController();
     mj.init().then(() => setMjCtrl(mj));
-    return () => ctrl.dispose();
   }, []);
+
+  const selectRobot = useCallback(async (robotId: string) => {
+    const robot = sampleRobots.find(r => r.id === robotId);
+    if (!robot || !mjCtrl) return;
+    setLoadingRobot(true);
+    try {
+      const xml = await loadBuiltInRobot(robot, mjCtrl, (msg, type) => useSimulationStore.getState().addLog(msg, type));
+      setRobotName(robot.name);
+      useRlStore.getState().setModelXML(xml);
+      useRlStore.getState().setModelName(robot.name);
+      setUseMujoco(true);
+      useSimulationStore.getState().addLog(`Loaded robot: ${robot.name}`, 'success');
+    } catch (err) {
+      useSimulationStore.getState().addLog(`Load error: ${err}`, 'error');
+    }
+    setLoadingRobot(false);
+  }, [mjCtrl]);
+
+  const handleLoadRobotFiles = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0 || !mjCtrl) return;
+
+    const getPath = (f: File) => (f as any).webkitRelativePath || f.name;
+    const allXmls = new Map<string, string>();
+    const meshes = new Map<string, Uint8Array>();
+    let rootFile: File | null = null;
+
+    for (const f of Array.from(files)) {
+      const path = getPath(f);
+      if (/\.(xml|mjcf)$/i.test(f.name)) {
+        allXmls.set(path, await f.text());
+        if (/^scene\.xml$/i.test(path.replace(/^.*[/\\]/, ''))) rootFile = f;
+      } else if (/\.(stl|obj|msh|dae|ply)$/i.test(f.name)) {
+        meshes.set(path, new Uint8Array(await f.arrayBuffer()));
+      }
+    }
+
+    if (!rootFile) {
+      const firstXml = Array.from(allXmls.entries()).find(([k]) => /\.(xml|mjcf)$/i.test(k));
+      if (!firstXml) {
+        useSimulationStore.getState().addLog('No XML/MJCF file found', 'error');
+        return;
+      }
+      rootFile = Array.from(files).find(f => getPath(f) === firstXml[0]) || null;
+    }
+    if (!rootFile) {
+      useSimulationStore.getState().addLog('No XML/MJCF file found', 'error');
+      return;
+    }
+
+    const rootPath = getPath(rootFile);
+    const rootText = allXmls.get(rootPath)!;
+    const name = rootFile.name.replace(/\.[^/.]+$/, '');
+    setRobotName(name);
+    useRlStore.getState().setModelName(name);
+
+    try {
+      await mjCtrl.loadXML(rootText, meshes, allXmls);
+      useRlStore.getState().setModelXML(rootText);
+      setUseMujoco(true);
+      useSimulationStore.getState().addLog(`Loaded robot: ${name}`, 'success');
+    } catch (err) {
+      useSimulationStore.getState().addLog(`Load error: ${err}`, 'error');
+    }
+  }, [mjCtrl]);
 
   // Training loop
   const episodeRef = useRef(0);
@@ -71,17 +118,21 @@ export function EditorPage() {
       return;
     }
 
-    // Recreate PPO agent if model dimensions or architecture changed
     const { architecture, archConfig } = useRlStore.getState();
     const dimKey = `${obsDim}x${actDim}-${architecture}-${archConfig.hiddenSize}-${archConfig.numLayers}`;
     if (!ppoRef.current || dimKeyRef.current !== dimKey) {
       if (ppoRef.current) { ppoRef.current.dispose(); setCurrentAgent(null); }
       const agent = new PPOAgent({ obsDim, actDim, architecture, archConfig });
-      // Restore best weights from localStorage
       try {
         const saved = localStorage.getItem(CACHE_KEY);
-        if (saved && agent.loadSerialized(saved)) {
-          useSimulationStore.getState().addLog('Loaded saved best weights', 'info');
+        if (saved) {
+          const result = agent.loadSerialized(saved);
+          if (result.ok) {
+            useSimulationStore.getState().addLog('Loaded saved best weights', 'info');
+          } else if (result.mismatch) {
+            useSimulationStore.getState().addLog(`Saved weights incompatible: ${result.mismatch}`, 'warning');
+            useRlStore.getState().setBestReward(-Infinity);
+          }
         }
       } catch {}
       ppoRef.current = agent;
@@ -98,7 +149,6 @@ export function EditorPage() {
 
     const runEpisode = () => {
       if (!mj.isLoaded || !useRlStore.getState().isTraining) return;
-
       mj.reset();
       agent.resetHistory();
       const transitions: Transition[] = [];
@@ -127,11 +177,8 @@ export function EditorPage() {
           transitions.push({ obs: modelInput, action, reward, done: step === episodeLen - 1, value, logProb });
         }
 
-        if (step < episodeLen) {
-          scheduleNext();
-        } else {
-          finishEpisode();
-        }
+        if (step < episodeLen) scheduleNext();
+        else finishEpisode();
       };
 
       const scheduleNext = () => {
@@ -171,164 +218,32 @@ export function EditorPage() {
     trainingLoopRef.current = setTimeout(runEpisode, 0);
 
     return () => {
-      if (trainingLoopRef.current) {
-        clearTimeout(trainingLoopRef.current);
-        trainingLoopRef.current = null;
-      }
+      if (trainingLoopRef.current) { clearTimeout(trainingLoopRef.current); trainingLoopRef.current = null; }
     };
   }, [isTraining, modelXML, mjCtrl]);
 
-  const hasMujocoModel = useRlStore((s) => s.modelXML !== null);
-
-  const handleEditorModeChange = useCallback((mode: EditorMode) => {
-    setEditorMode(mode);
-
-    if (mode === 'simulation' && hasMujocoModel && mjCtrl) {
-      useSimulationStore.getState().addLog('MuJoCo simulation mode — robot loaded', 'success');
-      if (controller) controller.clearBodies();
-      if (!mjCtrl.isLoaded) {
-        const xml = useRlStore.getState().modelXML;
-        if (xml) mjCtrl.loadXML(xml).catch((err) =>
-          useSimulationStore.getState().addLog(`Reload error: ${err}`, 'error')
-        );
-      }
-      setUseMujoco(true);
-      return;
-    }
-
-    if (mode === 'simulation' && controller) {
-      setUseMujoco(false);
-      // Create physics bodies only for models explicitly marked as physics objects
-      let bodyCount = 0;
-      for (const m of useModelStore.getState().models) {
-        if (m.meshParts && m.meshParts.length > 1) {
-          // Per-part physics: only create bodies for marked parts
-          const activeParts = m.meshParts.filter((p) => p.physicsType !== 'none');
-          if (activeParts.length === 0) continue;
-
-          const collisionGroup = m.meshParts.length > 1 ? 1 : undefined;
-          for (const part of activeParts) {
-            controller.addBody({
-              id: part.id,
-              type: part.physicsType as 'dynamic' | 'static',
-              shape: 'convexHull',
-              vertices: part.vertices,
-              position: {
-                x: part.position.x + m.position.x,
-                y: part.position.y + m.position.y,
-                z: part.position.z + m.position.z,
-              },
-              mass: Math.max(0.5, part.vertices.length / 3000),
-              noSelfCollide: collisionGroup,
-            });
-            bodyCount++;
-          }
-
-          // Find the first non-wheel part as root, or use the first active part
-          const rootPart = activeParts.find((p) => !p.isWheel) || activeParts[0];
-          for (const part of activeParts) {
-            if (part.id === rootPart.id) continue;
-            controller.createJoint({
-              bodyId1: rootPart.id,
-              bodyId2: part.id,
-              jointType: part.isWheel ? 'revolute' : 'fixed',
-              anchor: {
-                x: part.position.x + m.position.x,
-                y: part.position.y + m.position.y,
-                z: part.position.z + m.position.z,
-              },
-              axis: { x: 1, y: 0, z: 0 },
-            });
-          }
-
-          useSimulationStore.getState().addLog(`${m.name}: ${activeParts.length} physics parts`, 'success');
-        } else if (m.physicsType !== 'none') {
-          controller.addBody({
-            id: m.bodyId,
-            type: m.physicsType as 'dynamic' | 'static',
-            shape: 'convexHull',
-            vertices: m.vertices,
-            position: m.position,
-            mass: m.vertices ? Math.max(0.5, m.vertices.length / 3000) : 1,
-          });
-          bodyCount++;
-        }
-      }
-
-      if (bodyCount === 0) {
-        useSimulationStore.getState().addLog('No physics objects — mark parts in Design mode with the Physics tool', 'warning');
-      }
-
-      controller.start();
-      useSimulationStore.getState().addLog('Simulation mode — physics running', 'success');
-    } else {
-      if (useMujoco) {
-        useRlStore.getState().setTraining(false);
-        setUseMujoco(false);
-      }
-      if (controller) {
-        controller.clearBodies();
-        controller.pause();
-      }
-      useSimulationStore.getState().addLog('Design mode — editing', 'info');
-    }
-  }, [controller, mjCtrl, hasMujocoModel, setEditorMode, useMujoco]);
-
   const handleRun = useCallback(() => {
     if (useMujoco && mjCtrl) {
-      useSimulationStore.getState().addLog('Starting MuJoCo simulation...', 'success');
-      return;
+      useSimulationStore.getState().addLog('MuJoCo simulation ready', 'success');
     }
-    if (!controller) return;
-    if (isRunning && !isPaused) controller.pause();
-    else if (isPaused) controller.resume();
-    else {
-      controller.start();
-      controller.runUserCode(code);
-    }
-  }, [controller, isRunning, isPaused, code, useMujoco, mjCtrl]);
+  }, [useMujoco, mjCtrl]);
 
   const handleStop = useCallback(() => {
-    if (useMujoco) {
-      useRlStore.getState().setTraining(false);
-      return;
-    }
-    controller?.stop();
-  }, [controller, useMujoco]);
+    if (useMujoco) useRlStore.getState().setTraining(false);
+  }, [useMujoco]);
 
   const handleReset = useCallback(() => {
     if (useMujoco && mjCtrl) {
       mjCtrl.reset();
       useRlStore.getState().setTraining(false);
       useRlStore.getState().setCurrentEpisode(0);
-      useSimulationStore.getState().addLog('MuJoCo simulation reset', 'info');
-      return;
-    }
-    if (editorMode === 'simulation') {
-      controller?.stop();
-      for (const m of models) {
-        if (m.meshParts && m.meshParts.length > 1) {
-          const activeParts = m.meshParts.filter((p) => p.physicsType !== 'none');
-          for (const part of activeParts) {
-            controller?.teleportBody(part.id, {
-              x: part.position.x + m.position.x,
-              y: part.position.y + m.position.y,
-              z: part.position.z + m.position.z,
-            });
-          }
-        } else if (m.physicsType !== 'none') {
-          controller?.teleportBody(m.bodyId, m.position);
-        }
-      }
-      useSimulationStore.getState().reset();
       useSimulationStore.getState().addLog('Simulation reset', 'info');
     }
-  }, [controller, editorMode, models, useMujoco, mjCtrl]);
+  }, [useMujoco, mjCtrl]);
 
   return (
     <div className="h-screen flex flex-col bg-gray-100">
-      {/* Loading overlay for MuJoCo initialization */}
-      {editorMode === 'simulation' && !mjCtrl && (
+      {!mjCtrl && (
         <div className="fixed inset-0 z-50 bg-white/90 backdrop-blur-sm flex items-center justify-center animate-fade-in">
           <div className="text-center">
             <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
@@ -338,25 +253,38 @@ export function EditorPage() {
         </div>
       )}
 
+      {loadingRobot && (
+        <div className="fixed inset-0 z-50 bg-white/60 backdrop-blur-sm flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-sm text-gray-600 font-medium">Loading robot...</p>
+          </div>
+        </div>
+      )}
+
       <Toolbar
-        controller={controller}
+        controller={null}
         isRunning={isRunning}
-        isPaused={isPaused}
-        editorMode={editorMode}
-        onEditorModeChange={handleEditorModeChange}
+        isPaused={false}
         onRun={handleRun}
         onStop={handleStop}
         onReset={handleReset}
-        transformMode={transformMode}
-        onTransformModeChange={setTransformMode}
+        onLoadRobot={() => loadFileInputRef.current?.click()}
+        robotName={robotName}
+      />
+
+      <input
+        ref={loadFileInputRef}
+        type="file"
+        // @ts-ignore
+        webkitdirectory=""
+        multiple
+        className="hidden"
+        onChange={(e) => handleLoadRobotFiles(e.target.files)}
       />
 
       <div className="flex-1 flex overflow-hidden relative">
-        {editorMode === 'design' ? (
-          <div className="w-64 flex-shrink-0 border-r border-gray-200">
-            <ModelLibrary />
-          </div>
-        ) : useMujoco ? (
+        {useMujoco ? (
           <div className="w-56 flex-shrink-0 border-r border-gray-200 flex flex-col bg-white">
             <div className="flex border-b border-gray-200">
               <button
@@ -385,13 +313,35 @@ export function EditorPage() {
             </div>
           </div>
         ) : (
-          <div className="w-56 flex-shrink-0 border-r border-gray-200">
-            <SensorPanel />
+          <div className="w-56 flex-shrink-0 border-r border-gray-200 flex flex-col bg-white">
+            <div className="p-3 border-b border-gray-100">
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Built-in Robots</p>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+              {sampleRobots.map((robot) => (
+                <button
+                  key={robot.id}
+                  onClick={() => selectRobot(robot.id)}
+                  disabled={loadingRobot}
+                  className="w-full text-left px-3 py-2 rounded-lg border border-gray-100 hover:border-blue-200 hover:bg-blue-50 transition-all disabled:opacity-50 group"
+                >
+                  <p className="text-sm font-medium text-gray-800 group-hover:text-blue-700">{robot.name}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{robot.desc}</p>
+                </button>
+              ))}
+            </div>
+            <div className="p-3 border-t border-gray-100">
+              <button
+                onClick={() => loadFileInputRef.current?.click()}
+                className="w-full px-3 py-1.5 rounded-lg border border-dashed border-gray-300 text-xs text-gray-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all"
+              >
+                + Load Custom Robot
+              </button>
+            </div>
           </div>
         )}
 
         <div className="flex-1 flex flex-col min-w-0 relative">
-          {editorMode === 'design' && <ModelDropZone />}
           <div className="flex-1">
             <SceneViewer>
               {useMujoco && mjCtrl && (
@@ -403,18 +353,8 @@ export function EditorPage() {
             </SceneViewer>
           </div>
         </div>
-
-        {editorMode === 'simulation' && !useMujoco && (
-          <div className="w-96 flex-shrink-0 flex flex-col border-l border-gray-200 bg-white">
-            <div className="flex-1 min-h-0">
-              <CodeEditor />
-            </div>
-            <div className="h-48 border-t border-gray-200">
-              <Console />
-            </div>
-          </div>
-        )}
       </div>
+
       <ToastOverlay />
     </div>
   );

@@ -53,7 +53,7 @@ export async function runDetection(imageData: ImageData): Promise<Detection[]> {
   if (!detectionModel) return [];
 
   const input = tf.browser.fromPixels(imageData).expandDims(0).toFloat();
-  const resized = tf.image.resizeBilinear(input, [224, 224]);
+  const resized = tf.image.resizeBilinear(input as unknown as tf.Tensor3D, [224, 224]);
   const normalized = resized.div(255.0);
 
   const result = detectionModel.predict(normalized) as tf.Tensor;
@@ -62,7 +62,10 @@ export async function runDetection(imageData: ImageData): Promise<Detection[]> {
 
   // COCO-SSD returns boxes, scores, classes
   if (Array.isArray(result)) {
-    const [boxesTensor, scoresTensor, classesTensor] = result as [tf.Tensor, tf.Tensor, tf.Tensor];
+    const r = result as unknown as tf.Tensor[];
+    const boxesTensor = r[0];
+    const scoresTensor = r[1];
+    const classesTensor = r[2];
     const boxes = await boxesTensor.array() as number[][][];
     const scores = await scoresTensor.array() as number[][];
     const classes = await classesTensor.array() as number[][];
