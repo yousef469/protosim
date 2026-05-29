@@ -14,14 +14,11 @@ const tfjsBadge: Record<TfjsSupport, { label: string; color: string }> = {
 const INSTALLED_KEY = 'protosim_installed_models';
 
 function getInstalled(): Set<string> {
-  try {
-    const raw = localStorage.getItem(INSTALLED_KEY);
-    return new Set<string>(raw ? JSON.parse(raw) : []);
-  } catch { return new Set(); }
+  return new Set();
 }
 
 function saveInstalled(ids: Set<string>) {
-  localStorage.setItem(INSTALLED_KEY, JSON.stringify([...ids]));
+  // No-op
 }
 
 type Tab = 'models' | 'datasets';
@@ -32,47 +29,12 @@ export function ModelHubPage() {
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<ModelCategory | 'all'>('all');
   const [downloading, setDownloading] = useState<string | null>(null);
-  const [installed, setInstalled] = useState<Set<string>>(getInstalled);
+  const [installed, setInstalled] = useState<Set<string>>(new Set());
   const addLog = useCallback((msg: string, level?: 'info' | 'success' | 'warning' | 'error') => {
     useSimulationStore.getState().addLog(msg, level);
   }, []);
 
-  const handleInstall = async (m: typeof modelHubData[number]) => {
-    if (installed.has(m.id)) {
-      addLog(`"${m.name}" is already installed`, 'info');
-      return;
-    }
 
-    // External / converted models → open source link
-    if (!m.modelUrl) {
-      window.open(m.source, '_blank');
-      return;
-    }
-
-    setDownloading(m.id);
-    addLog(`Downloading "${m.name}"...`, 'info');
-
-    try {
-      let model: tf.LayersModel | tf.GraphModel;
-      try {
-        model = await tf.loadGraphModel(m.modelUrl);
-      } catch {
-        model = await tf.loadLayersModel(m.modelUrl);
-      }
-      await model.save(`indexeddb://protosim/${m.id}`);
-      model.dispose();
-
-      const updated = new Set(installed);
-      updated.add(m.id);
-      setInstalled(updated);
-      saveInstalled(updated);
-      addLog(`"${m.name}" installed successfully`, 'success');
-    } catch (err) {
-      addLog(`Failed to install "${m.name}": ${err instanceof Error ? err.message : err}`, 'error');
-    } finally {
-      setDownloading(null);
-    }
-  };
 
   const filtered = modelHubData.filter((m) => {
     if (activeCategory !== 'all' && m.category !== activeCategory) return false;
@@ -122,7 +84,7 @@ export function ModelHubPage() {
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 animate-fade-in">
                 {filtered.map((m, i) => (
                   <div key={m.id} style={{ animationDelay: `${i * 30}ms` }} className="animate-slide-up">
-                    <ModelCard model={m} downloading={downloading === m.id} installed={installed.has(m.id)} onInstall={handleInstall} />
+                    <ModelCard model={m} />
                   </div>
                 ))}
               </div>
@@ -191,11 +153,8 @@ function Header({ tab, onTabChange, onBack, search, onSearchChange }: {
   );
 }
 
-function ModelCard({ model, downloading, installed, onInstall }: {
+function ModelCard({ model }: {
   model: typeof modelHubData[number];
-  downloading: boolean;
-  installed: boolean;
-  onInstall: (m: typeof modelHubData[number]) => void;
 }) {
   const badge = tfjsBadge[model.tfjs];
   const hasModelUrl = !!model.modelUrl;
@@ -228,24 +187,18 @@ function ModelCard({ model, downloading, installed, onInstall }: {
       <div className="flex items-center justify-between">
         <span className="text-[10px] text-gray-500">{model.framework}</span>
 
-        {downloading ? (
-          <span className="text-[10px] text-yellow-400 font-medium">Downloading...</span>
-        ) : installed ? (
-          <span className="text-[10px] text-green-400 font-medium">Installed ✓</span>
-        ) : (
-          <button
-            onClick={() => onInstall(model)}
-            className={`text-[10px] font-medium px-3 py-1 rounded-lg transition-colors ${
-              hasModelUrl
-                ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                : model.source === '#'
-                  ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-            }`}
-          >
-            {hasModelUrl ? 'Install' : model.source === '#' ? 'No Source' : 'View Source'}
-          </button>
-        )}
+         <a
+           href={model.source}
+           target="_blank"
+           rel="noopener noreferrer"
+           className={`text-[10px] font-medium px-3 py-1 rounded-lg transition-colors ${
+             model.source === '#'
+               ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+               : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+           }`}
+         >
+           {model.source === '#' ? 'No Source' : 'Download Model'}
+         </a>
       </div>
     </div>
   );
