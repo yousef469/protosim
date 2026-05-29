@@ -86,6 +86,7 @@ export function MuJoCoRenderer({ ctrl }: { ctrl: MuJoCoController }) {
   const meshesRef = useRef<Map<number, GeomMesh>>(new Map());
   const sceneGroupRef = useRef<THREE.Group>(null);
   const initRef = useRef(false);
+  const prevPos = useRef(new Float32Array(3));
 
   useEffect(() => {
     initRef.current = false;
@@ -167,7 +168,7 @@ export function MuJoCoRenderer({ ctrl }: { ctrl: MuJoCoController }) {
       gm.mesh.quaternion.setFromRotationMatrix(m4);
     }
 
-    // Track robot head position + orientation for vision camera (highest non-plane geom)
+    // Track robot head position + velocity direction for vision camera (highest non-plane geom)
     let maxY = -Infinity, headIdx = -1;
     for (let i = 0; i < ngeom; i++) {
       if (geomType[i] === mjGEOM_PLANE || geomType[i] === mjGEOM_NONE) continue;
@@ -179,16 +180,22 @@ export function MuJoCoRenderer({ ctrl }: { ctrl: MuJoCoController }) {
     }
     if (headIdx >= 0) {
       const off = headIdx * 3;
-      const mOff = headIdx * 9;
       robotViewState.position[0] = xpos[off];
       robotViewState.position[1] = xpos[off + 1];
       robotViewState.position[2] = xpos[off + 2];
-      // Forward direction = local X axis of geom rotation matrix
-      const fx = xmat[mOff], fy = xmat[mOff + 3], fz = xmat[mOff + 6];
-      const len = Math.sqrt(fx * fx + fy * fy + fz * fz) || 1;
-      robotViewState.forward[0] = fx / len;
-      robotViewState.forward[1] = fy / len;
-      robotViewState.forward[2] = fz / len;
+
+      // Forward direction from horizontal velocity
+      const pp = prevPos.current;
+      const dx = robotViewState.position[0] - pp[0];
+      const dz = robotViewState.position[2] - pp[2];
+      const speed = Math.sqrt(dx * dx + dz * dz);
+      if (speed > 0.001) {
+        robotViewState.forward[0] = dx / speed;
+        robotViewState.forward[2] = dz / speed;
+      }
+      pp[0] = robotViewState.position[0];
+      pp[1] = robotViewState.position[1];
+      pp[2] = robotViewState.position[2];
     }
 
     if (meshes.size > ngeom) {

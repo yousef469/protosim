@@ -1,9 +1,10 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { robotViewState } from '../../rl/vision';
 
 export function CameraOverlay() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -16,7 +17,10 @@ export function CameraOverlay() {
     const draw = () => {
       if (!running) return;
 
-      if (robotViewState.captureActive && robotViewState.imageData) {
+      const active = robotViewState.captureActive;
+      if (active !== visible) setVisible(active);
+
+      if (active && robotViewState.imageData) {
         canvas.width = robotViewState.imageData.width;
         canvas.height = robotViewState.imageData.height;
         ctx.putImageData(robotViewState.imageData, 0, 0);
@@ -46,12 +50,14 @@ export function CameraOverlay() {
 
     draw();
     return () => { running = false; cancelAnimationFrame(animRef.current); };
-  }, []);
-
-  if (!robotViewState.captureActive) return null;
+  }, [visible]);
 
   return (
-    <div className="fixed bottom-3 right-3 w-44 h-44 rounded-lg border-2 border-green-500 shadow-xl bg-black z-50 overflow-hidden">
+    <div
+      className={`fixed bottom-3 right-3 w-44 h-44 rounded-lg border-2 shadow-xl bg-black z-50 overflow-hidden transition-opacity duration-200 ${
+        visible ? 'opacity-100 border-green-500' : 'opacity-0 pointer-events-none border-transparent'
+      }`}
+    >
       <canvas ref={canvasRef} className="w-full h-full object-contain" />
       <div className="absolute top-1 left-1.5 text-[9px] text-green-400 font-mono bg-black/60 px-1 rounded">
         ROBOT CAM
