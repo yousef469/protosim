@@ -27,7 +27,7 @@ export const modelHubData: ModelHubEntry[] = [
     tfjs: 'native',
     framework: 'TensorFlow.js',
     parameters: '8M',
-    modelUrl: 'https://storage.googleapis.com/tfjs-models/tfjs/coco-ssd/model.json',
+    modelUrl: 'https://storage.googleapis.com/tfjs-models/savedmodel/ssdlite_mobilenet_v2/model.json',
   },
   {
     id: 'mobilenet-v2',
