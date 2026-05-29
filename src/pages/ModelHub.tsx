@@ -53,7 +53,12 @@ export function ModelHubPage() {
     addLog(`Downloading "${m.name}"...`, 'info');
 
     try {
-      const model = await tf.loadLayersModel(m.modelUrl);
+      let model: tf.LayersModel | tf.GraphModel;
+      try {
+        model = await tf.loadGraphModel(m.modelUrl);
+      } catch {
+        model = await tf.loadLayersModel(m.modelUrl);
+      }
       await model.save(`indexeddb://protosim/${m.id}`);
       model.dispose();
 
