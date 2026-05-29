@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as tf from '@tensorflow/tfjs';
 import useSimulationStore from '../store/simulationStore';
@@ -62,8 +62,25 @@ export function ModelHubPage() {
       setInstalled(updated);
       saveInstalled(updated);
       addLog(`"${m.name}" installed successfully`, 'success');
+
+      // Pendo: track model installation
+      (window as any).pendo?.track('model_installed', {
+        modelId: m.id,
+        modelName: m.name,
+        modelCategory: m.category,
+        tfjsSupport: m.tfjs,
+        framework: m.framework,
+      });
     } catch (err) {
       addLog(`Failed to install "${m.name}": ${err instanceof Error ? err.message : err}`, 'error');
+
+      // Pendo: track model install failure
+      (window as any).pendo?.track('model_install_failed', {
+        modelId: m.id,
+        modelName: m.name,
+        modelCategory: m.category,
+        errorMessage: String(err instanceof Error ? err.message : err).substring(0, 200),
+      });
     } finally {
       setDownloading(null);
     }
@@ -77,6 +94,22 @@ export function ModelHubPage() {
     }
     return true;
   });
+
+  // Pendo: debounced tracking of model hub searches
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!search && activeCategory === 'all') return;
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      (window as any).pendo?.track('model_hub_searched', {
+        searchQuery: search || '',
+        activeCategory,
+        activeTab: tab,
+        resultCount: filtered.length,
+      });
+    }, 500);
+    return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
+  }, [search, activeCategory, tab, filtered.length]);
 
   const filteredDatasets = datasetHubData.filter((d) => {
     if (search) {

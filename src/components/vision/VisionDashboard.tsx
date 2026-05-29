@@ -40,12 +40,33 @@ export function VisionDashboard() {
         setDetectionModel(model);
         setModelState('loaded');
         addLog(`"${selectedModel}" loaded — robot vision active`, 'success');
+
+        // Pendo: track vision model loaded successfully
+        (window as any).pendo?.track('vision_model_loaded', {
+          selectedModel,
+          loadSuccess: true,
+          modelState: 'loaded',
+        });
       } else {
         setModelState('error');
         addLog(`Failed to load "${selectedModel}"`, 'error');
+
+        // Pendo: track vision model load failure
+        (window as any).pendo?.track('vision_model_loaded', {
+          selectedModel,
+          loadSuccess: false,
+          modelState: 'error',
+        });
       }
     } catch {
       setModelState('error');
+
+      // Pendo: track vision model load error
+      (window as any).pendo?.track('vision_model_loaded', {
+        selectedModel,
+        loadSuccess: false,
+        modelState: 'error',
+      });
     }
   }, [selectedModel, addLog]);
 
