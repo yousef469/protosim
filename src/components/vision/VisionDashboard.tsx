@@ -4,6 +4,7 @@ import useSimulationStore from '../../store/simulationStore';
 import { robotViewState, loadVisionModel, setDetectionModel } from '../../rl/vision';
 import { modelHubData } from '../../data/modelHubData';
 import { addSpawnedObject, getSpawnedObjects, removeSpawnedObject } from '../../rl/sceneObjects';
+import { CameraOverlay } from './CameraOverlay';
 
 interface InstalledModel {
   id: string;
@@ -217,9 +218,14 @@ export function VisionDashboard() {
           <div className="flex gap-1">
             <button
               onClick={() => {
-                const x = (Math.random() - 0.5) * 1.5;
-                const z = 2 + Math.random() * 2;
-                addSpawnedObject({ type: 'sphere', x, y: 0.15, z, color: '#ff4444', size: 0.15 });
+                const f = robotViewState.forward;
+                const dist = 2 + Math.random() * 1.5;
+                addSpawnedObject({
+                  type: 'sphere', color: '#ff4444', size: 0.15,
+                  x: f[0] * dist + (Math.random() - 0.5) * 0.8,
+                  y: 0.15,
+                  z: f[2] * dist + (Math.random() - 0.5) * 0.8,
+                });
               }}
               className="flex-1 py-1 rounded bg-red-100 hover:bg-red-200 text-[10px] text-red-700 font-medium"
             >
@@ -227,9 +233,14 @@ export function VisionDashboard() {
             </button>
             <button
               onClick={() => {
-                const x = (Math.random() - 0.5) * 1.5;
-                const z = 2 + Math.random() * 2;
-                addSpawnedObject({ type: 'box', x, y: 0.15, z, color: '#4488ff', size: 0.15 });
+                const f = robotViewState.forward;
+                const dist = 2 + Math.random() * 1.5;
+                addSpawnedObject({
+                  type: 'box', color: '#4488ff', size: 0.15,
+                  x: f[0] * dist + (Math.random() - 0.5) * 0.8,
+                  y: 0.15,
+                  z: f[2] * dist + (Math.random() - 0.5) * 0.8,
+                });
               }}
               className="flex-1 py-1 rounded bg-blue-100 hover:bg-blue-200 text-[10px] text-blue-700 font-medium"
             >
@@ -237,9 +248,14 @@ export function VisionDashboard() {
             </button>
             <button
               onClick={() => {
-                const x = (Math.random() - 0.5) * 1.5;
-                const z = 2 + Math.random() * 2;
-                addSpawnedObject({ type: 'cylinder', x, y: 0.15, z, color: '#44cc44', size: 0.15 });
+                const f = robotViewState.forward;
+                const dist = 2 + Math.random() * 1.5;
+                addSpawnedObject({
+                  type: 'cylinder', color: '#44cc44', size: 0.15,
+                  x: f[0] * dist + (Math.random() - 0.5) * 0.8,
+                  y: 0.15,
+                  z: f[2] * dist + (Math.random() - 0.5) * 0.8,
+                });
               }}
               className="flex-1 py-1 rounded bg-green-100 hover:bg-green-200 text-[10px] text-green-700 font-medium"
             >

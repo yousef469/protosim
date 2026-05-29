@@ -19,10 +19,19 @@ export function RobotCameraCapture() {
   useFrame(() => {
     if (!robotViewState.captureActive) return;
 
-    // Follow robot head position
+    // Follow robot head position — look in robot's forward direction
     const p = robotViewState.position;
-    robotCam.position.set(p[0], p[1] + 0.05, p[2] + 0.15);
-    robotCam.lookAt(p[0], p[1] - 0.1, p[2] + 3);
+    const f = robotViewState.forward;
+    robotCam.position.set(
+      p[0] + f[0] * 0.15,
+      p[1] + 0.05,
+      p[2] + f[2] * 0.15,
+    );
+    robotCam.lookAt(
+      p[0] + f[0] * 3,
+      p[1] - 0.1,
+      p[2] + f[2] * 3,
+    );
 
     // Render scene from robot POV into render target
     gl.setRenderTarget(renderTarget);

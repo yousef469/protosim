@@ -167,22 +167,28 @@ export function MuJoCoRenderer({ ctrl }: { ctrl: MuJoCoController }) {
       gm.mesh.quaternion.setFromRotationMatrix(m4);
     }
 
-    // Track robot head position for vision camera (highest non-plane geom)
-    let maxY = -Infinity, headX = 0, headZ = 0;
+    // Track robot head position + orientation for vision camera (highest non-plane geom)
+    let maxY = -Infinity, headIdx = -1;
     for (let i = 0; i < ngeom; i++) {
       if (geomType[i] === mjGEOM_PLANE || geomType[i] === mjGEOM_NONE) continue;
-      const off = i * 3;
-      const y = xpos[off + 1];
+      const y = xpos[i * 3 + 1];
       if (y > maxY) {
         maxY = y;
-        headX = xpos[off];
-        headZ = xpos[off + 2];
+        headIdx = i;
       }
     }
-    if (maxY > -Infinity) {
-      robotViewState.position[0] = headX;
-      robotViewState.position[1] = maxY;
-      robotViewState.position[2] = headZ;
+    if (headIdx >= 0) {
+      const off = headIdx * 3;
+      const mOff = headIdx * 9;
+      robotViewState.position[0] = xpos[off];
+      robotViewState.position[1] = xpos[off + 1];
+      robotViewState.position[2] = xpos[off + 2];
+      // Forward direction = local X axis of geom rotation matrix
+      const fx = xmat[mOff], fy = xmat[mOff + 3], fz = xmat[mOff + 6];
+      const len = Math.sqrt(fx * fx + fy * fy + fz * fz) || 1;
+      robotViewState.forward[0] = fx / len;
+      robotViewState.forward[1] = fy / len;
+      robotViewState.forward[2] = fz / len;
     }
 
     if (meshes.size > ngeom) {

@@ -11,6 +11,7 @@ import { setCurrentAgent } from '../rl/agentRef';
 import { robotViewState } from '../rl/vision';
 import { RobotCameraCapture } from '../components/vision/RobotCameraCapture';
 import { SpawnedObjects } from '../components/vision/SpawnedObjects';
+import { CameraOverlay } from '../components/vision/CameraOverlay';
 import { VisionDashboard } from '../components/vision/VisionDashboard';
 import { computeReward } from '../rl/tasks';
 import useSimulationStore from '../store/simulationStore';
@@ -357,6 +358,7 @@ export function EditorPage() {
         </div>
       </div>
 
+      <CameraOverlay />
       <ToastOverlay />
     </div>
   );

@@ -15,6 +15,7 @@ export interface VisionModelInfo {
 
 export const robotViewState = {
   position: new Float32Array([0, 0, 0]),
+  forward: new Float32Array([0, 0, -1]),
   quaternion: new Float32Array([0, 0, 1, 0]),
   imageData: null as ImageData | null,
   detections: [] as Detection[],
@@ -86,28 +87,31 @@ export async function runDetection(imageData: ImageData): Promise<Detection[]> {
 
   let detections: Detection[] = [];
 
-  if (Array.isArray(result)) {
-    boxesLoop:
-    for (const candidate of result) {
-      const shape = candidate.shape;
-      if (shape.length === 3 && shape[2] === 4) {
-        // boxes tensor [1, N, 4]
-        const scores = await (result[0] as tf.Tensor).array() as number[][][];
-        const boxes = await (candidate as tf.Tensor).array() as number[][][];
-        const batchScores = scores[0] || [];
-        const batchBoxes = boxes[0] || [];
-        const numBoxes = Math.min(batchScores.length, batchBoxes.length);
-        for (let i = 0; i < numBoxes; i++) {
-          const score = batchScores[i][1];
-          if (score > 0.5) {
-            detections.push({
-              bbox: batchBoxes[i] as [number, number, number, number],
-              class: 'object',
-              score,
-            });
-          }
+  if (Array.isArray(result) && result.length >= 2) {
+    // COCO-SSD output: [scores(1,N,91), boxes(1,N,4)]
+    const scoresArr = await (result[0] as tf.Tensor).array() as number[][][];
+    const boxesArr = await (result[1] as tf.Tensor).array() as number[][][];
+
+    const batchScores = scoresArr[0] || [];
+    const batchBoxes = boxesArr[0] || [];
+    const numBoxes = Math.min(batchScores.length, batchBoxes.length);
+
+    for (let i = 0; i < numBoxes; i++) {
+      const classProbs = batchScores[i];
+      // Find class with max score (skip background at index 0)
+      let bestClass = 0, bestScore = 0;
+      for (let c = 1; c < classProbs.length; c++) {
+        if (classProbs[c] > bestScore) {
+          bestScore = classProbs[c];
+          bestClass = c;
         }
-        break boxesLoop;
+      }
+      if (bestScore > 0.4) {
+        detections.push({
+          bbox: batchBoxes[i] as [number, number, number, number],
+          class: COCO_CLASSES[bestClass - 1] || 'unknown',
+          score: bestScore,
+        });
       }
     }
   }
