@@ -167,20 +167,22 @@ export function MuJoCoRenderer({ ctrl }: { ctrl: MuJoCoController }) {
       gm.mesh.quaternion.setFromRotationMatrix(m4);
     }
 
-    // Track robot position for vision camera (average of non-plane geoms)
-    let avgX = 0, avgY = 0, avgZ = 0, count = 0;
+    // Track robot head position for vision camera (highest non-plane geom)
+    let maxY = -Infinity, headX = 0, headZ = 0;
     for (let i = 0; i < ngeom; i++) {
       if (geomType[i] === mjGEOM_PLANE || geomType[i] === mjGEOM_NONE) continue;
       const off = i * 3;
-      avgX += xpos[off];
-      avgY += xpos[off + 1];
-      avgZ += xpos[off + 2];
-      count++;
+      const y = xpos[off + 1];
+      if (y > maxY) {
+        maxY = y;
+        headX = xpos[off];
+        headZ = xpos[off + 2];
+      }
     }
-    if (count > 0) {
-      robotViewState.position[0] = avgX / count;
-      robotViewState.position[1] = avgY / count;
-      robotViewState.position[2] = avgZ / count;
+    if (maxY > -Infinity) {
+      robotViewState.position[0] = headX;
+      robotViewState.position[1] = maxY;
+      robotViewState.position[2] = headZ;
     }
 
     if (meshes.size > ngeom) {

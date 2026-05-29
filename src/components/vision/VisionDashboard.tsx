@@ -55,11 +55,18 @@ export function VisionDashboard() {
     }
   }, [selectedModel, addLog]);
 
+  // Stop capture when component unmounts
+  useEffect(() => {
+    return () => { robotViewState.captureActive = false; };
+  }, []);
+
   const handleToggle = useCallback(() => {
     setEnabled((e) => {
+      robotViewState.captureActive = !e;
       if (!e) {
-        // Clear previous detections when enabling
         robotViewState.detections = [];
+      } else {
+        robotViewState.imageData = null;
       }
       return !e;
     });

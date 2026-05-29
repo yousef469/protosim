@@ -17,10 +17,12 @@ export function RobotCameraCapture() {
   const pixels = useRef(new Uint8Array(CAPTURE_SIZE * CAPTURE_SIZE * 4));
 
   useFrame(() => {
-    // Follow robot position
+    if (!robotViewState.captureActive) return;
+
+    // Follow robot head position
     const p = robotViewState.position;
-    robotCam.position.set(p[0], p[1] + 0.4, p[2] - 0.3);
-    robotCam.lookAt(p[0], p[1] + 0.2, p[2] + 1);
+    robotCam.position.set(p[0], p[1] + 0.05, p[2] + 0.15);
+    robotCam.lookAt(p[0], p[1] - 0.1, p[2] + 3);
 
     // Render scene from robot POV into render target
     gl.setRenderTarget(renderTarget);

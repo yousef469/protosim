@@ -19,6 +19,7 @@ export const robotViewState = {
   imageData: null as ImageData | null,
   detections: [] as Detection[],
   visionModel: null as VisionModelInfo | null,
+  captureActive: false,
 };
 
 const COCO_CLASSES = [
