@@ -8,11 +8,9 @@ import { CACHE_KEY, sampleRobots, loadBuiltInRobot } from '../mujoco/sampleRobot
 import { getMuJoCoController, type MuJoCoController as MuJoCoControllerType } from '../mujoco/MuJoCoController';
 import { PPOAgent, type Transition } from '../rl/PPO';
 import { setCurrentAgent } from '../rl/agentRef';
-import { robotViewState } from '../rl/vision';
-import { RobotCameraCapture } from '../components/vision/RobotCameraCapture';
-import { SpawnedObjects } from '../components/vision/SpawnedObjects';
-import { CameraOverlay } from '../components/vision/CameraOverlay';
-import { VisionDashboard } from '../components/vision/VisionDashboard';
+
+
+
 import { computeReward } from '../rl/tasks';
 import useSimulationStore from '../store/simulationStore';
 import useRlStore from '../store/rlStore';
@@ -299,20 +297,11 @@ export function EditorPage() {
               >
                 Training
               </button>
-              <button
-                onClick={() => setSidebarTab('vision')}
-                className={`flex-1 py-1.5 text-[10px] font-medium transition-all duration-150 ${
-                  sidebarTab === 'vision'
-                    ? 'text-purple-600 border-b-2 border-purple-600 bg-white'
-                    : 'text-gray-400 hover:text-gray-600 bg-gray-50 hover:bg-gray-100'
-                }`}
-              >
-                Vision
-              </button>
+
             </div>
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              {sidebarTab === 'training' ? <TrainingDashboard /> : <VisionDashboard />}
-            </div>
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                <TrainingDashboard />
+              </div>
           </div>
         ) : (
           <div className="w-56 flex-shrink-0 border-r border-gray-200 flex flex-col bg-white">
@@ -349,8 +338,6 @@ export function EditorPage() {
               {useMujoco && mjCtrl && (
                 <>
                   <MuJoCoRenderer ctrl={mjCtrl} />
-                  <SpawnedObjects />
-                  <RobotCameraCapture />
                 </>
               )}
             </SceneViewer>
@@ -358,7 +345,6 @@ export function EditorPage() {
         </div>
       </div>
 
-      <CameraOverlay />
       <ToastOverlay />
     </div>
   );

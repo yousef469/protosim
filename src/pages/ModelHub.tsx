@@ -197,7 +197,7 @@ function ModelCard({ model }: {
                : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
            }`}
          >
-           {model.source === '#' ? 'No Source' : 'Download Model'}
+           {model.source === '#' ? 'No Source' : 'Install Model'}
          </a>
       </div>
     </div>

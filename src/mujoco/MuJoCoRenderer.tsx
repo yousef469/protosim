@@ -2,7 +2,7 @@ import { useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { MuJoCoController } from './MuJoCoController';
-import { robotViewState } from '../rl/vision';
+
 
 const mjGEOM_PLANE = 0;
 const mjGEOM_SPHERE = 2;
@@ -86,7 +86,6 @@ export function MuJoCoRenderer({ ctrl }: { ctrl: MuJoCoController }) {
   const meshesRef = useRef<Map<number, GeomMesh>>(new Map());
   const sceneGroupRef = useRef<THREE.Group>(null);
   const initRef = useRef(false);
-  const prevPos = useRef(new Float32Array(3));
 
   useEffect(() => {
     initRef.current = false;
@@ -168,72 +167,7 @@ export function MuJoCoRenderer({ ctrl }: { ctrl: MuJoCoController }) {
       gm.mesh.quaternion.setFromRotationMatrix(m4);
     }
 
-    // Track robot head position + velocity direction for vision camera
-    // Try 1: find body named "head" or similar
-    let headBodyId = -1;
-    const nbody = ctrl.modelNbody;
-    for (let i = 0; i < nbody; i++) {
-      const name = ctrl.getBodyName(i).toLowerCase();
-      if (name.includes('head') || name.includes('nose') || name.includes('face')) {
-        headBodyId = i;
-        break;
-      }
-    }
 
-    // Try 2: fallback to highest non-plane geom
-    let maxY = -Infinity, headGeomIdx = -1;
-    if (headBodyId < 0) {
-      for (let i = 0; i < ngeom; i++) {
-        if (geomType[i] === mjGEOM_PLANE || geomType[i] === mjGEOM_NONE) continue;
-        const y = xpos[i * 3 + 1];
-        if (y > maxY) {
-          maxY = y;
-          headGeomIdx = i;
-        }
-      }
-    }
-
-    // Set position from body or geom
-    if (headBodyId >= 0) {
-      const off = headBodyId * 3;
-      robotViewState.position[0] = state.xpos[off];
-      robotViewState.position[1] = state.xpos[off + 1];
-      robotViewState.position[2] = state.xpos[off + 2];
-    } else if (headGeomIdx >= 0) {
-      const off = headGeomIdx * 3;
-      robotViewState.position[0] = xpos[off];
-      robotViewState.position[1] = xpos[off + 1];
-      robotViewState.position[2] = xpos[off + 2];
-    }
-
-    // Forward direction: use head body quaternion if available, else velocity
-    const pp = prevPos.current;
-    if (headBodyId >= 0) {
-      // Head body quaternion: xquat[headBodyId*4 ... headBodyId*4+3]
-      const qOff = headBodyId * 4;
-      const qx = state.xquat[qOff], qy = state.xquat[qOff + 1], qz = state.xquat[qOff + 2], qw = state.xquat[qOff + 3];
-      // Convert quaternion to forward vector (local X axis in world space)
-      // Forward = (1-2y²-2z², 2xy-2wz, 2xz+2wy)
-      const fx = 1 - 2*qy*qy - 2*qz*qz;
-      const fy = 2*qx*qy - 2*qw*qz;
-      const fz = 2*qx*qz + 2*qw*qy;
-      const len = Math.sqrt(fx*fx + fy*fy + fz*fz) || 1;
-      robotViewState.forward[0] = fx / len;
-      robotViewState.forward[1] = fy / len;
-      robotViewState.forward[2] = fz / len;
-    } else {
-      // Fallback to velocity-based forward
-      const dx = robotViewState.position[0] - pp[0];
-      const dz = robotViewState.position[2] - pp[2];
-      const speed = Math.sqrt(dx * dx + dz * dz);
-      if (speed > 0.001) {
-        robotViewState.forward[0] = dx / speed;
-        robotViewState.forward[2] = dz / speed;
-      }
-    }
-    pp[0] = robotViewState.position[0];
-    pp[1] = robotViewState.position[1];
-    pp[2] = robotViewState.position[2];
 
     if (meshes.size > ngeom) {
       for (const [i, gm] of meshes) {
