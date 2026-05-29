@@ -168,35 +168,56 @@ export function MuJoCoRenderer({ ctrl }: { ctrl: MuJoCoController }) {
       gm.mesh.quaternion.setFromRotationMatrix(m4);
     }
 
-    // Track robot head position + velocity direction for vision camera (highest non-plane geom)
-    let maxY = -Infinity, headIdx = -1;
-    for (let i = 0; i < ngeom; i++) {
-      if (geomType[i] === mjGEOM_PLANE || geomType[i] === mjGEOM_NONE) continue;
-      const y = xpos[i * 3 + 1];
-      if (y > maxY) {
-        maxY = y;
-        headIdx = i;
+    // Track robot head position + velocity direction for vision camera
+    // Try 1: find body named "head" or similar
+    let headBodyId = -1;
+    const nbody = ctrl.modelNbody;
+    for (let i = 0; i < nbody; i++) {
+      const name = ctrl.getBodyName(i).toLowerCase();
+      if (name.includes('head') || name.includes('nose') || name.includes('face')) {
+        headBodyId = i;
+        break;
       }
     }
-    if (headIdx >= 0) {
-      const off = headIdx * 3;
+
+    // Try 2: fallback to highest non-plane geom
+    let maxY = -Infinity, headGeomIdx = -1;
+    if (headBodyId < 0) {
+      for (let i = 0; i < ngeom; i++) {
+        if (geomType[i] === mjGEOM_PLANE || geomType[i] === mjGEOM_NONE) continue;
+        const y = xpos[i * 3 + 1];
+        if (y > maxY) {
+          maxY = y;
+          headGeomIdx = i;
+        }
+      }
+    }
+
+    // Set position from body or geom
+    if (headBodyId >= 0) {
+      const off = headBodyId * 3;
+      robotViewState.position[0] = state.xpos[off];
+      robotViewState.position[1] = state.xpos[off + 1];
+      robotViewState.position[2] = state.xpos[off + 2];
+    } else if (headGeomIdx >= 0) {
+      const off = headGeomIdx * 3;
       robotViewState.position[0] = xpos[off];
       robotViewState.position[1] = xpos[off + 1];
       robotViewState.position[2] = xpos[off + 2];
-
-      // Forward direction from horizontal velocity
-      const pp = prevPos.current;
-      const dx = robotViewState.position[0] - pp[0];
-      const dz = robotViewState.position[2] - pp[2];
-      const speed = Math.sqrt(dx * dx + dz * dz);
-      if (speed > 0.001) {
-        robotViewState.forward[0] = dx / speed;
-        robotViewState.forward[2] = dz / speed;
-      }
-      pp[0] = robotViewState.position[0];
-      pp[1] = robotViewState.position[1];
-      pp[2] = robotViewState.position[2];
     }
+
+    // Forward direction from horizontal velocity
+    const pp = prevPos.current;
+    const dx = robotViewState.position[0] - pp[0];
+    const dz = robotViewState.position[2] - pp[2];
+    const speed = Math.sqrt(dx * dx + dz * dz);
+    if (speed > 0.001) {
+      robotViewState.forward[0] = dx / speed;
+      robotViewState.forward[2] = dz / speed;
+    }
+    pp[0] = robotViewState.position[0];
+    pp[1] = robotViewState.position[1];
+    pp[2] = robotViewState.position[2];
 
     if (meshes.size > ngeom) {
       for (const [i, gm] of meshes) {
