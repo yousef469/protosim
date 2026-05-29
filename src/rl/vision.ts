@@ -94,7 +94,10 @@ export async function loadVisionModel(modelId: string, fallbackUrl?: string): Pr
 let detectionModel: tf.LayersModel | tf.GraphModel | null = null;
 
 export async function runDetection(imageData: ImageData): Promise<Detection[]> {
-  if (!detectionModel) return [];
+  if (!detectionModel) {
+    console.log('runDetection: no model loaded');
+    return [];
+  }
 
   const input = tf.browser.fromPixels(imageData).slice([0, 0, 0], [224, 224, 3]).expandDims(0).toFloat();
   const resized = tf.image.resizeBilinear(input as unknown as tf.Tensor4D, [300, 300]);

@@ -206,14 +206,30 @@ export function MuJoCoRenderer({ ctrl }: { ctrl: MuJoCoController }) {
       robotViewState.position[2] = xpos[off + 2];
     }
 
-    // Forward direction from horizontal velocity
+    // Forward direction: use head body quaternion if available, else velocity
     const pp = prevPos.current;
-    const dx = robotViewState.position[0] - pp[0];
-    const dz = robotViewState.position[2] - pp[2];
-    const speed = Math.sqrt(dx * dx + dz * dz);
-    if (speed > 0.001) {
-      robotViewState.forward[0] = dx / speed;
-      robotViewState.forward[2] = dz / speed;
+    if (headBodyId >= 0) {
+      // Head body quaternion: xquat[headBodyId*4 ... headBodyId*4+3]
+      const qOff = headBodyId * 4;
+      const qx = state.xquat[qOff], qy = state.xquat[qOff + 1], qz = state.xquat[qOff + 2], qw = state.xquat[qOff + 3];
+      // Convert quaternion to forward vector (local X axis in world space)
+      // Forward = (1-2y²-2z², 2xy-2wz, 2xz+2wy)
+      const fx = 1 - 2*qy*qy - 2*qz*qz;
+      const fy = 2*qx*qy - 2*qw*qz;
+      const fz = 2*qx*qz + 2*qw*qy;
+      const len = Math.sqrt(fx*fx + fy*fy + fz*fz) || 1;
+      robotViewState.forward[0] = fx / len;
+      robotViewState.forward[1] = fy / len;
+      robotViewState.forward[2] = fz / len;
+    } else {
+      // Fallback to velocity-based forward
+      const dx = robotViewState.position[0] - pp[0];
+      const dz = robotViewState.position[2] - pp[2];
+      const speed = Math.sqrt(dx * dx + dz * dz);
+      if (speed > 0.001) {
+        robotViewState.forward[0] = dx / speed;
+        robotViewState.forward[2] = dz / speed;
+      }
     }
     pp[0] = robotViewState.position[0];
     pp[1] = robotViewState.position[1];
