@@ -34,15 +34,31 @@ const COCO_CLASSES = [
   'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush',
 ];
 
-export async function loadVisionModel(modelId: string): Promise<tf.LayersModel | tf.GraphModel | null> {
+export async function loadVisionModel(modelId: string, fallbackUrl?: string): Promise<tf.LayersModel | tf.GraphModel | null> {
   robotViewState.visionModel = { id: modelId, name: modelId, loaded: false, loading: true };
-  try {
-    const model = await tf.loadGraphModel(`indexeddb://protosim/${modelId}`);
-    robotViewState.visionModel = { id: modelId, name: modelId, loaded: true, loading: false };
-    return model;
-  } catch {
+
+  // Try loading from IndexedDB first
+  for (const loader of ['graph', 'layers'] as const) {
     try {
-      const model = await tf.loadLayersModel(`indexeddb://protosim/${modelId}`);
+      const fn = loader === 'graph' ? tf.loadGraphModel : tf.loadLayersModel;
+      const model = await fn(`indexeddb://protosim/${modelId}`);
+      robotViewState.visionModel = { id: modelId, name: modelId, loaded: true, loading: false };
+      return model;
+    } catch {
+      // try next loader
+    }
+  }
+
+  // Fallback: download from URL and save to IndexedDB
+  if (fallbackUrl) {
+    try {
+      let model: tf.LayersModel | tf.GraphModel;
+      try {
+        model = await tf.loadGraphModel(fallbackUrl);
+      } catch {
+        model = await tf.loadLayersModel(fallbackUrl);
+      }
+      await model.save(`indexeddb://protosim/${modelId}`);
       robotViewState.visionModel = { id: modelId, name: modelId, loaded: true, loading: false };
       return model;
     } catch (err) {
@@ -51,6 +67,9 @@ export async function loadVisionModel(modelId: string): Promise<tf.LayersModel |
       return null;
     }
   }
+
+  robotViewState.visionModel = { id: modelId, name: modelId, loaded: false, loading: false };
+  return null;
 }
 
 let detectionModel: tf.LayersModel | tf.GraphModel | null = null;

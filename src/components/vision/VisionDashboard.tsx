@@ -2,14 +2,30 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import * as tf from '@tensorflow/tfjs';
 import useSimulationStore from '../../store/simulationStore';
 import { robotViewState, loadVisionModel, setDetectionModel } from '../../rl/vision';
+import { modelHubData } from '../../data/modelHubData';
 
 interface InstalledModel {
   id: string;
   name: string;
 }
 
+const INSTALLED_KEY = 'protosim_installed_models';
+
+function getInstalledFromStorage(): InstalledModel[] {
+  try {
+    const raw = localStorage.getItem(INSTALLED_KEY);
+    const ids: string[] = raw ? JSON.parse(raw) : [];
+    return ids.map(id => ({
+      id,
+      name: modelHubData.find(m => m.id === id)?.name || id,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export function VisionDashboard() {
-  const [installedModels, setInstalledModels] = useState<InstalledModel[]>([]);
+  const [installedModels, setInstalledModels] = useState<InstalledModel[]>(getInstalledFromStorage);
   const [selectedModel, setSelectedModel] = useState<string>('');
   const [modelState, setModelState] = useState<'none' | 'loading' | 'loaded' | 'error'>('none');
   const [enabled, setEnabled] = useState(false);
@@ -19,23 +35,13 @@ export function VisionDashboard() {
     useSimulationStore.getState().addLog(msg, level);
   }, []);
 
-  useEffect(() => {
-    tf.io.listModels().then((models) => {
-      const installed: InstalledModel[] = [];
-      for (const key of Object.keys(models)) {
-        const match = key.match(/^protosim\/(.+)$/);
-        if (match) installed.push({ id: match[1], name: match[1] });
-      }
-      setInstalledModels(installed);
-    });
-  }, []);
-
   const handleLoad = useCallback(async () => {
     if (!selectedModel) return;
     setModelState('loading');
     addLog(`Loading "${selectedModel}" for vision...`, 'info');
     try {
-      const model = await loadVisionModel(selectedModel);
+      const entry = modelHubData.find(m => m.id === selectedModel);
+      const model = await loadVisionModel(selectedModel, entry?.modelUrl);
       if (model) {
         setDetectionModel(model);
         setModelState('loaded');
