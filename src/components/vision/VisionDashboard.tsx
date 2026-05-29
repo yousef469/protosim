@@ -3,6 +3,7 @@ import * as tf from '@tensorflow/tfjs';
 import useSimulationStore from '../../store/simulationStore';
 import { robotViewState, loadVisionModel, setDetectionModel } from '../../rl/vision';
 import { modelHubData } from '../../data/modelHubData';
+import { addSpawnedObject, getSpawnedObjects, removeSpawnedObject } from '../../rl/sceneObjects';
 
 interface InstalledModel {
   id: string;
@@ -209,6 +210,57 @@ export function VisionDashboard() {
               : 'No detections'}
           </div>
         )}
+
+        {/* Scene Objects */}
+        <div className="pt-2 border-t border-gray-100 space-y-1.5">
+          <label className="text-[10px] text-gray-400 font-medium">Scene Objects</label>
+          <div className="flex gap-1">
+            <button
+              onClick={() => {
+                const x = (Math.random() - 0.5) * 1.5;
+                const z = 2 + Math.random() * 2;
+                addSpawnedObject({ type: 'sphere', x, y: 0.15, z, color: '#ff4444', size: 0.15 });
+              }}
+              className="flex-1 py-1 rounded bg-red-100 hover:bg-red-200 text-[10px] text-red-700 font-medium"
+            >
+              + Ball
+            </button>
+            <button
+              onClick={() => {
+                const x = (Math.random() - 0.5) * 1.5;
+                const z = 2 + Math.random() * 2;
+                addSpawnedObject({ type: 'box', x, y: 0.15, z, color: '#4488ff', size: 0.15 });
+              }}
+              className="flex-1 py-1 rounded bg-blue-100 hover:bg-blue-200 text-[10px] text-blue-700 font-medium"
+            >
+              + Box
+            </button>
+            <button
+              onClick={() => {
+                const x = (Math.random() - 0.5) * 1.5;
+                const z = 2 + Math.random() * 2;
+                addSpawnedObject({ type: 'cylinder', x, y: 0.15, z, color: '#44cc44', size: 0.15 });
+              }}
+              className="flex-1 py-1 rounded bg-green-100 hover:bg-green-200 text-[10px] text-green-700 font-medium"
+            >
+              + Cyl
+            </button>
+          </div>
+          {getSpawnedObjects().length > 0 && (
+            <div className="flex gap-1">
+              {getSpawnedObjects().map(obj => (
+                <button
+                  key={obj.id}
+                  onClick={() => removeSpawnedObject(obj.id)}
+                  className="px-1.5 py-0.5 rounded bg-gray-100 hover:bg-red-100 text-[9px] text-gray-500 hover:text-red-600"
+                  title={`Remove ${obj.type}`}
+                >
+                  ✕ {obj.type}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
