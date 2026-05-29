@@ -3,7 +3,7 @@ import * as tf from '@tensorflow/tfjs';
 import useSimulationStore from '../../store/simulationStore';
 import { robotViewState, loadVisionModel, setDetectionModel } from '../../rl/vision';
 import { modelHubData } from '../../data/modelHubData';
-import { addSpawnedObject, getSpawnedObjects, removeSpawnedObject } from '../../rl/sceneObjects';
+import { addSpawnedObject, getSpawnedObjects, removeSpawnedObject, getPlacementMode, setPlacementMode, getPlaceType, setPlaceType, type PlaceType } from '../../rl/sceneObjects';
 import { CameraOverlay } from './CameraOverlay';
 
 interface InstalledModel {
@@ -215,16 +215,18 @@ export function VisionDashboard() {
         {/* Scene Objects */}
         <div className="pt-2 border-t border-gray-100 space-y-1.5">
           <label className="text-[10px] text-gray-400 font-medium">Scene Objects</label>
+
+          {/* Quick-spawn buttons */}
           <div className="flex gap-1">
             <button
               onClick={() => {
                 const f = robotViewState.forward;
-                const dist = 2 + Math.random() * 1.5;
+                const dist = 2 + Math.random() * 0.5;
                 addSpawnedObject({
                   type: 'sphere', color: '#ff4444', size: 0.15,
-                  x: f[0] * dist + (Math.random() - 0.5) * 0.8,
+                  x: f[0] * dist + (Math.random() - 0.5) * 0.3,
                   y: 0.15,
-                  z: f[2] * dist + (Math.random() - 0.5) * 0.8,
+                  z: f[2] * dist + (Math.random() - 0.5) * 0.3,
                 });
               }}
               className="flex-1 py-1 rounded bg-red-100 hover:bg-red-200 text-[10px] text-red-700 font-medium"
@@ -234,12 +236,12 @@ export function VisionDashboard() {
             <button
               onClick={() => {
                 const f = robotViewState.forward;
-                const dist = 2 + Math.random() * 1.5;
+                const dist = 2 + Math.random() * 0.5;
                 addSpawnedObject({
                   type: 'box', color: '#4488ff', size: 0.15,
-                  x: f[0] * dist + (Math.random() - 0.5) * 0.8,
+                  x: f[0] * dist + (Math.random() - 0.5) * 0.3,
                   y: 0.15,
-                  z: f[2] * dist + (Math.random() - 0.5) * 0.8,
+                  z: f[2] * dist + (Math.random() - 0.5) * 0.3,
                 });
               }}
               className="flex-1 py-1 rounded bg-blue-100 hover:bg-blue-200 text-[10px] text-blue-700 font-medium"
@@ -249,12 +251,12 @@ export function VisionDashboard() {
             <button
               onClick={() => {
                 const f = robotViewState.forward;
-                const dist = 2 + Math.random() * 1.5;
+                const dist = 2 + Math.random() * 0.5;
                 addSpawnedObject({
                   type: 'cylinder', color: '#44cc44', size: 0.15,
-                  x: f[0] * dist + (Math.random() - 0.5) * 0.8,
+                  x: f[0] * dist + (Math.random() - 0.5) * 0.3,
                   y: 0.15,
-                  z: f[2] * dist + (Math.random() - 0.5) * 0.8,
+                  z: f[2] * dist + (Math.random() - 0.5) * 0.3,
                 });
               }}
               className="flex-1 py-1 rounded bg-green-100 hover:bg-green-200 text-[10px] text-green-700 font-medium"
@@ -262,6 +264,36 @@ export function VisionDashboard() {
               + Cyl
             </button>
           </div>
+
+          {/* Place mode toggle */}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={getPlacementMode()}
+              onChange={(e) => setPlacementMode(e.target.checked)}
+              className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+            />
+            <span className="text-[10px] text-gray-500">Click to place</span>
+          </label>
+
+          {getPlacementMode() && (
+            <div className="flex gap-1">
+              {(['sphere', 'box', 'cylinder'] as PlaceType[]).map(type => (
+                <button
+                  key={type}
+                  onClick={() => setPlaceType(getPlaceType() === type ? null : type)}
+                  className={`flex-1 py-1 rounded text-[10px] font-medium ${
+                    getPlaceType() === type
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}
+                >
+                  {type === 'sphere' ? 'Ball' : type === 'box' ? 'Box' : 'Cyl'}
+                </button>
+              ))}
+            </div>
+          )}
+          <p className="text-[9px] text-gray-400">Click in 3D scene to place. Drag objects to move them.</p>
           {getSpawnedObjects().length > 0 && (
             <div className="flex gap-1">
               {getSpawnedObjects().map(obj => (
