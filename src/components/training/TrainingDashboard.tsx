@@ -93,9 +93,16 @@ export function TrainingDashboard() {
     const a = document.createElement('a');
     a.href = url;
     a.download = `checkpoint_${bestReward === -Infinity ? 'untrained' : bestReward.toFixed(2)}.json`;
+    const checkpointFilename = a.download;
     a.click();
     URL.revokeObjectURL(url);
     useSimulationStore.getState().addLog('Checkpoint exported', 'success');
+
+    // Pendo: track checkpoint export
+    (window as any).pendo?.track('checkpoint_exported', {
+      bestReward: bestReward === -Infinity ? 'untrained' : bestReward,
+      checkpointFilename,
+    });
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -117,8 +124,12 @@ export function TrainingDashboard() {
       } catch {}
 
       // Reload weights into the running agent if available
+      let loadedIntoRunningAgent = false;
+      let loadSuccess = true;
       if (currentAgent) {
         const ok = currentAgent.loadSerialized(raw);
+        loadedIntoRunningAgent = true;
+        loadSuccess = ok;
         useSimulationStore.getState().addLog(
           ok ? 'Checkpoint loaded into running agent' : 'Failed to load checkpoint',
           ok ? 'success' : 'error',
@@ -126,6 +137,18 @@ export function TrainingDashboard() {
       } else {
         useSimulationStore.getState().addLog('Checkpoint saved — start training to apply', 'info');
       }
+
+      // Pendo: track checkpoint import
+      let rewardFromCheckpoint: number | undefined;
+      try {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.reward === 'number') rewardFromCheckpoint = parsed.reward;
+      } catch {}
+      (window as any).pendo?.track('checkpoint_imported', {
+        rewardFromCheckpoint: rewardFromCheckpoint ?? 'unknown',
+        loadedIntoRunningAgent,
+        loadSuccess,
+      });
     };
     reader.readAsText(file);
   };

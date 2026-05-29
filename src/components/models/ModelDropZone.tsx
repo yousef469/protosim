@@ -22,6 +22,14 @@ export function ModelDropZone() {
     setDragging(false);
 
     const files = Array.from(e.dataTransfer.files);
+
+    // Pendo: track model file drop
+    (window as any).pendo?.track('model_file_dropped', {
+      fileCount: files.length,
+      fileNames: files.map(f => f.name).join(', ').substring(0, 200),
+      fileFormats: files.map(f => detectFormat(f.name) || 'unknown').join(', '),
+    });
+
     for (const file of files) {
       const format = detectFormat(file.name);
       if (!format) {

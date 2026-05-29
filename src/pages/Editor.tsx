@@ -96,6 +96,23 @@ export function EditorPage() {
 
     useSimulationStore.getState().addLog(`Starting PPO training (obs=${obsDim}, act=${actDim}, arch=${architecture})`, 'success');
 
+    // Pendo: track training session start
+    const rlState = useRlStore.getState();
+    (window as any).pendo?.track('training_started', {
+      architecture,
+      hiddenSize: archConfig.hiddenSize,
+      numLayers: archConfig.numLayers,
+      historyLen: archConfig.historyLen,
+      kernelSize: archConfig.kernelSize,
+      trainingTask: rlState.trainingTask,
+      customRewardCode: rlState.customRewardCode ? 'yes' : 'no',
+      obsDim,
+      actDim,
+      totalEpisodes: rlState.totalEpisodes,
+      trainingSpeed: rlState.trainingSpeed,
+      robotName: rlState.modelName || 'unknown',
+    });
+
     const runEpisode = () => {
       if (!mj.isLoaded || !useRlStore.getState().isTraining) return;
 
@@ -145,8 +162,21 @@ export function EditorPage() {
         episodeRef.current++;
 
         const prevBest = useRlStore.getState().bestReward;
+        const isNewBestReward = avgReward > prevBest;
         setCurrentEpisode(episodeRef.current);
         addEpisodeReward({ episode: episodeRef.current, reward: avgReward, length: episodeLen, timestamp: Date.now() });
+
+        // Pendo: track episode completion
+        (window as any).pendo?.track('episode_completed', {
+          episodeNumber: episodeRef.current,
+          averageReward: avgReward,
+          policyLoss,
+          valueLoss,
+          episodeLength: episodeLen,
+          isNewBestReward,
+          architecture: useRlStore.getState().architecture,
+          trainingTask: useRlStore.getState().trainingTask,
+        });
         if (avgReward > prevBest) {
           const serialized = agent.saveSerialized(avgReward);
           try { localStorage.setItem('protosim_best_weights', serialized); } catch {}
@@ -160,6 +190,15 @@ export function EditorPage() {
         if (episodeRef.current >= useRlStore.getState().totalEpisodes) {
           useRlStore.getState().setTraining(false);
           useSimulationStore.getState().addLog('Training complete!', 'success');
+
+          // Pendo: track training run completion
+          (window as any).pendo?.track('training_completed', {
+            totalEpisodes: useRlStore.getState().totalEpisodes,
+            bestReward: useRlStore.getState().bestReward,
+            architecture: useRlStore.getState().architecture,
+            trainingTask: useRlStore.getState().trainingTask,
+            finalEpisodeReward: avgReward,
+          });
         } else {
           trainingLoopRef.current = setTimeout(runEpisode, 0);
         }
@@ -261,6 +300,14 @@ export function EditorPage() {
 
       controller.start();
       useSimulationStore.getState().addLog('Simulation mode — physics running', 'success');
+
+      // Pendo: track simulation physics initialization
+      (window as any).pendo?.track('simulation_physics_initialized', {
+        bodyCount,
+        useMujoco: false,
+        hasMujocoModel,
+        modelCount: useModelStore.getState().models.length,
+      });
     } else {
       if (useMujoco) {
         useRlStore.getState().setTraining(false);
@@ -285,6 +332,12 @@ export function EditorPage() {
     else {
       controller.start();
       controller.runUserCode(code);
+
+      // Pendo: track user code execution
+      (window as any).pendo?.track('user_code_executed', {
+        codeLength: code.length,
+        useMujoco: false,
+      });
     }
   }, [controller, isRunning, isPaused, code, useMujoco, mjCtrl]);
 

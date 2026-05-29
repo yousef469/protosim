@@ -117,6 +117,15 @@ export function ModelLibrary() {
       useRlStore.getState().setModelXML(rootXmlContent);
       useRlStore.getState().setModelName(xmlName);
       useSimulationStore.getState().addLog(`Loaded robot: ${xmlName} + ${meshFiles.size} meshes + ${allXmls.size} XMLs`, 'success');
+
+      // Pendo: track MJCF robot loaded
+      (window as any).pendo?.track('mjcf_robot_loaded', {
+        robotName: xmlName,
+        meshFileCount: meshFiles.size,
+        xmlFileCount: allXmls.size,
+        rootXmlFile: rootXmlFile.name,
+        loadSuccess: true,
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       useSimulationStore.getState().addLog(`Robot error: ${msg}`, 'error');
@@ -144,6 +153,13 @@ export function ModelLibrary() {
         position: { x: 0, y: 2, z: 0 }, mass: 1,
       });
       useSimulationStore.getState().addLog(`Loaded: ${file.name}`, 'success');
+
+      // Pendo: track model file upload
+      (window as any).pendo?.track('model_file_uploaded', {
+        fileName: file.name,
+        fileFormat: format,
+        modelId: id,
+      });
     }
     e.target.value = '';
   };
@@ -253,6 +269,13 @@ export function ModelLibrary() {
                   useRlStore.getState().setModelXML(r.xml);
                   useRlStore.getState().setModelName(r.name);
                   useSimulationStore.getState().addLog(`Loaded sample: ${r.name}`, 'success');
+
+                  // Pendo: track sample robot loaded
+                  (window as any).pendo?.track('sample_robot_loaded', {
+                    robotName: r.name,
+                    robotDescription: r.desc,
+                    loadSuccess: true,
+                  });
                 } catch (err) {
                   const msg = err instanceof Error ? err.message : String(err);
                   useSimulationStore.getState().addLog(`Sample error: ${msg}`, 'error');
